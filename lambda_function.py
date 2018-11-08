@@ -229,3 +229,14 @@ def lambda_handler(event, context):
         sys.exit('ERROR: Route 53 VPC serial %s for domain %s is greater than existing serial %s' % (str(vpc_serial), domain_name, str(serial)))
 
     return 'SUCCESS: %s mirrored to Route 53 VPC serial %s' % (domain_name, str(serial))
+
+
+if len(sys.argv) < 4:
+    print sys.argv[0]+ " domain master_dns zone_id"
+else:
+    event = {}
+    event['Domain'] = sys.argv[1]
+    event['MasterDns'] = sys.argv[2]
+    event['ZoneId'] = sys.argv[3]
+    event['IgnoreTTL'] = False
+    lambda_handler(event, None)
