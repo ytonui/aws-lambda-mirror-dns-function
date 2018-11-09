@@ -157,6 +157,19 @@ def diff_zones(zone1, zone2, ignore_ttl):
 
     return differences
 
+def check_record(record_):
+    for rec in record_:
+        if ping_address(rec.address):
+            return True
+        else:
+            return False
+
+def ping_address(address):
+    response = os.system("ping -c 1 -W 1 -t 1 " + address)
+    if response == 0:
+        return True
+    else:
+        return False
 
 # Main Handler for lambda function
 def lambda_handler(event, context):
@@ -214,8 +227,17 @@ def lambda_handler(event, context):
 
         for host, rdtype, record, ttl, action in differences:
             if rdtype != dns.rdatatype.SOA:
-                update_resource_record(route53_zone_id, host, domain_name, lookup_rdtype.recmap(rdtype), record, ttl,
+
+                if rdtype == dns.rdatatype.A:
+                    if check_record(record):
+                        update_resource_record(route53_zone_id, host, domain_name, lookup_rdtype.recmap(rdtype), record, ttl,
                                        action)
+                    else:
+                        print('record is not up skipping')
+
+                else:
+                    update_resource_record(route53_zone_id, host, domain_name, lookup_rdtype.recmap(rdtype), record, ttl,
+                            action)
 
         # Update the VPC SOA to reflect the version just processed
         vpc_soa[0].serial = serial
