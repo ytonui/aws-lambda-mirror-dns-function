@@ -165,6 +165,8 @@ def lambda_handler(event, context):
         domain_name = event['Domain']
         master_ip = event['MasterDns']
         route53_zone_id = event['ZoneId']
+        r53domain_name = event['R53Domain']
+        
         if event['IgnoreTTL'] == 'True':
             ignore_ttl = True  # Ignore TTL changes in records
         else:
@@ -186,20 +188,20 @@ def lambda_handler(event, context):
     serial = soa[0].serial  # What's the current zone version on-prem
 
     # Read the zone from Route 53 via API and populate into zone object
-    vpc_zone = dns.zone.Zone(origin=domain_name)
+    vpc_zone = dns.zone.Zone(origin=r53domain_name)
     print 'Getting VPC SOA serial from Route 53'  # Get the SOA from Route 53 by API to avoid getting stale records
     try:
         vpc_recordset = route53.list_resource_record_sets(HostedZoneId=route53_zone_id)['ResourceRecordSets']
         for record in vpc_recordset:
             # Change the record name so that it doesn't have the domain name appended
-            recordname = record['Name'].replace(domain_name + '.', '')
+            recordname = record['Name'].replace(r53domain_name + '.', '')
             if recordname == '':
                 recordname = '@'
             else:
                 recordname = recordname.rstrip('.')
             rdataset = vpc_zone.find_rdataset(recordname, rdtype=str(record['Type']), create=True)
             for value in record['ResourceRecords']:
-                rdata = dns.rdata.from_text(1, rdataset.rdtype, value['Value'].replace(domain_name + '.', ''))
+                rdata = dns.rdata.from_text(1, rdataset.rdtype, value['Value'].replace(r53domain_name + '.', ''))
                 rdataset.add(rdata, ttl=int(record['TTL']))
     except BaseException as e:
         print e
@@ -214,14 +216,14 @@ def lambda_handler(event, context):
 
         for host, rdtype, record, ttl, action in differences:
             if rdtype != dns.rdatatype.SOA:
-                update_resource_record(route53_zone_id, host, domain_name, lookup_rdtype.recmap(rdtype), record, ttl,
+                update_resource_record(route53_zone_id, host, r53domain_name, lookup_rdtype.recmap(rdtype), record, ttl,
                                        action)
 
         # Update the VPC SOA to reflect the version just processed
         vpc_soa[0].serial = serial
         try:
             soarecord = [str(vpc_soa[0])]
-            update_resource_record(route53_zone_id, '', domain_name, 'SOA', soarecord, vpc_soa[0].minimum, 'UPSERT')
+            update_resource_record(route53_zone_id, '', r53domain_name, 'SOA', soarecord, vpc_soa[0].minimum, 'UPSERT')
         except BaseException as e:
             print e
             sys.exit('ERROR: Failed to update SOA to %s on Route 53 VPC Zone' % str(serial))
@@ -229,3 +231,4 @@ def lambda_handler(event, context):
         sys.exit('ERROR: Route 53 VPC serial %s for domain %s is greater than existing serial %s' % (str(vpc_serial), domain_name, str(serial)))
 
     return 'SUCCESS: %s mirrored to Route 53 VPC serial %s' % (domain_name, str(serial))
+
